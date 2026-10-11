@@ -2,7 +2,6 @@
 #include <fstream>
 #include <string>
 #include <vector>
-#include <map>
 #include <set>
 #include <algorithm>
 #include <sstream>
@@ -15,15 +14,14 @@ class FileDatabase {
 private:
     std::string filename;
     
-    // Read the entire log and build current state
-    // Returns map of index to set of active values
-    std::map<std::string, std::set<int>> buildCurrentState() {
-        std::map<std::string, std::set<int>> data;
+    // For a given index, scan the log and return active values
+    std::set<int> findActiveValues(const std::string& targetIndex) {
+        std::set<int> activeValues;
         std::ifstream file(filename);
         
         if (!file) {
-            // File doesn't exist, return empty map
-            return data;
+            // File doesn't exist, return empty set
+            return activeValues;
         }
         
         std::string line;
@@ -34,22 +32,22 @@ private:
             std::string status;
             
             if (iss >> index >> value) {
-                // Check if this is a deletion marker
-                if (iss >> status && status == "D") {
-                    // This is a deletion, remove the value
-                    auto it = data.find(index);
-                    if (it != data.end()) {
-                        it->second.erase(value);
+                // Only process records for the target index
+                if (index == targetIndex) {
+                    // Check if this is a deletion marker
+                    if (iss >> status && status == "D") {
+                        // This is a deletion, remove the value
+                        activeValues.erase(value);
+                    } else {
+                        // This is an insertion, add the value
+                        activeValues.insert(value);
                     }
-                } else {
-                    // This is an insertion, add the value
-                    data[index].insert(value);
                 }
             }
         }
         
         file.close();
-        return data;
+        return activeValues;
     }
 
 public:
@@ -70,16 +68,11 @@ public:
     }
     
     std::vector<int> find(const std::string& index) {
-        // Build current state from log
-        auto data = buildCurrentState();
-        auto it = data.find(index);
-        
-        if (it == data.end()) {
-            return std::vector<int>();
-        }
+        // Get active values for this index
+        auto activeValues = findActiveValues(index);
         
         // Convert set to vector (already sorted due to set properties)
-        return std::vector<int>(it->second.begin(), it->second.end());
+        return std::vector<int>(activeValues.begin(), activeValues.end());
     }
 };
 
