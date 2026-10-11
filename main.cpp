@@ -10,13 +10,14 @@
 
 const std::string DATA_FILE = "database.dat";
 
-// Database class for file-based storage using text format
+// Database class for file-based storage using append-only log
 class FileDatabase {
 private:
     std::string filename;
     
-    // Load all records from file - returns map of index to set of values
-    std::map<std::string, std::set<int>> loadAll() {
+    // Read the entire log and build current state
+    // Returns map of index to set of active values
+    std::map<std::string, std::set<int>> buildCurrentState() {
         std::map<std::string, std::set<int>> data;
         std::ifstream file(filename);
         
@@ -30,56 +31,47 @@ private:
             std::istringstream iss(line);
             std::string index;
             int value;
+            std::string status;
             
             if (iss >> index >> value) {
-                data[index].insert(value);
+                // Check if this is a deletion marker
+                if (iss >> status && status == "D") {
+                    // This is a deletion, remove the value
+                    auto it = data.find(index);
+                    if (it != data.end()) {
+                        it->second.erase(value);
+                    }
+                } else {
+                    // This is an insertion, add the value
+                    data[index].insert(value);
+                }
             }
         }
         
         file.close();
         return data;
     }
-    
-    // Save all data to file
-    void saveAll(const std::map<std::string, std::set<int>>& data) {
-        std::ofstream file(filename);
-        
-        for (const auto& entry : data) {
-            const std::string& index = entry.first;
-            const std::set<int>& values = entry.second;
-            
-            for (int value : values) {
-                file << index << " " << value << "\n";
-            }
-        }
-        
-        file.close();
-    }
 
 public:
     FileDatabase(const std::string& file) : filename(file) {}
     
     void insert(const std::string& index, int value) {
-        auto data = loadAll();
-        data[index].insert(value);
-        saveAll(data);
+        // Append the new record to the file
+        std::ofstream file(filename, std::ios::app);
+        file << index << " " << value << "\n";
+        file.close();
     }
     
     void remove(const std::string& index, int value) {
-        auto data = loadAll();
-        auto it = data.find(index);
-        if (it != data.end()) {
-            it->second.erase(value);
-            // If no more values for this index, remove the index
-            if (it->second.empty()) {
-                data.erase(it);
-            }
-        }
-        saveAll(data);
+        // Append a deletion marker for this record
+        std::ofstream file(filename, std::ios::app);
+        file << index << " " << value << " D\n";
+        file.close();
     }
     
     std::vector<int> find(const std::string& index) {
-        auto data = loadAll();
+        // Build current state from log
+        auto data = buildCurrentState();
         auto it = data.find(index);
         
         if (it == data.end()) {
