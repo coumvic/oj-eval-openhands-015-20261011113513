@@ -13,43 +13,19 @@ const std::string DATA_FILE = "database.dat";
 class FileDatabase {
 private:
     std::string filename;
-    std::ifstream readFile;  // Shared read stream
-    
-    // Open the read file stream
-    void openReadFile() {
-        if (!readFile.is_open()) {
-            readFile.open(filename);
-            // If file doesn't exist, create it
-            if (!readFile) {
-                std::ofstream createFile(filename);
-                createFile.close();
-                readFile.open(filename);
-            }
-        } else {
-            // Clear any error flags and seek to beginning
-            readFile.clear();
-            readFile.seekg(0);
-        }
-    }
-    
-    // Close the read file stream
-    void closeReadFile() {
-        if (readFile.is_open()) {
-            readFile.close();
-        }
-    }
     
     // For a given index, scan the log and return active values
     std::set<int> findActiveValues(const std::string& targetIndex) {
         std::set<int> activeValues;
+        std::ifstream file(filename);
         
-        openReadFile();
-        if (!readFile) {
-            return activeValues;  // Return empty set if file can't be opened
+        if (!file) {
+            // File doesn't exist, return empty set
+            return activeValues;
         }
         
         std::string line;
-        while (std::getline(readFile, line)) {
+        while (std::getline(file, line)) {
             std::istringstream iss(line);
             std::string index;
             int value;
@@ -70,6 +46,7 @@ private:
             }
         }
         
+        file.close();
         return activeValues;
     }
 
@@ -80,14 +57,11 @@ public:
         createFile.close();
     }
     
-    ~FileDatabase() {
-        closeReadFile();
-    }
-    
     void insert(const std::string& index, int value) {
         // Append the new record to the file
         std::ofstream file(filename, std::ios::app);
         file << index << " " << value << "\n";
+        file.flush();
         file.close();
     }
     
@@ -95,6 +69,7 @@ public:
         // Append a deletion marker for this record
         std::ofstream file(filename, std::ios::app);
         file << index << " " << value << " D\n";
+        file.flush();
         file.close();
     }
     
