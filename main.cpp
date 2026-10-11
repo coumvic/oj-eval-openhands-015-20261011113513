@@ -10,47 +10,47 @@
 
 const std::string DATA_FILE = "database.dat";
 
-// Structure to store key-value pairs
-struct Record {
-    std::string index;
-    int value;
-    
-    bool operator<(const Record& other) const {
-        if (index != other.index) return index < other.index;
-        return value < other.value;
-    }
-};
-
-// Database class for file-based storage
+// Database class for file-based storage using text format
 class FileDatabase {
 private:
     std::string filename;
     
-    // Load all records from file
-    std::vector<Record> loadRecords() {
-        std::vector<Record> records;
-        std::ifstream file(filename, std::ios::binary);
+    // Load all records from file - returns map of index to set of values
+    std::map<std::string, std::set<int>> loadAll() {
+        std::map<std::string, std::set<int>> data;
+        std::ifstream file(filename);
         
         if (!file) {
-            // File doesn't exist, return empty vector
-            return records;
+            // File doesn't exist, return empty map
+            return data;
         }
         
-        Record record;
-        while (file.read(reinterpret_cast<char*>(&record), sizeof(Record))) {
-            records.push_back(record);
+        std::string line;
+        while (std::getline(file, line)) {
+            std::istringstream iss(line);
+            std::string index;
+            int value;
+            
+            if (iss >> index >> value) {
+                data[index].insert(value);
+            }
         }
         
         file.close();
-        return records;
+        return data;
     }
     
-    // Save all records to file
-    void saveRecords(const std::vector<Record>& records) {
-        std::ofstream file(filename, std::ios::binary | std::ios::trunc);
+    // Save all data to file
+    void saveAll(const std::map<std::string, std::set<int>>& data) {
+        std::ofstream file(filename);
         
-        for (const auto& record : records) {
-            file.write(reinterpret_cast<const char*>(&record), sizeof(Record));
+        for (const auto& entry : data) {
+            const std::string& index = entry.first;
+            const std::set<int>& values = entry.second;
+            
+            for (int value : values) {
+                file << index << " " << value << "\n";
+            }
         }
         
         file.close();
@@ -60,55 +60,34 @@ public:
     FileDatabase(const std::string& file) : filename(file) {}
     
     void insert(const std::string& index, int value) {
-        auto records = loadRecords();
-        
-        // Check if this exact record already exists
-        for (const auto& record : records) {
-            if (record.index == index && record.value == value) {
-                return; // Already exists, do nothing
-            }
-        }
-        
-        // Add new record
-        Record newRecord;
-        newRecord.index = index;
-        newRecord.value = value;
-        records.push_back(newRecord);
-        
-        // Sort records for consistent ordering
-        std::sort(records.begin(), records.end());
-        
-        saveRecords(records);
+        auto data = loadAll();
+        data[index].insert(value);
+        saveAll(data);
     }
     
     void remove(const std::string& index, int value) {
-        auto records = loadRecords();
-        
-        // Find and remove the record
-        auto it = std::remove_if(records.begin(), records.end(), 
-                                [&index, value](const Record& record) {
-                                    return record.index == index && record.value == value;
-                                });
-        records.erase(it, records.end());
-        
-        saveRecords(records);
+        auto data = loadAll();
+        auto it = data.find(index);
+        if (it != data.end()) {
+            it->second.erase(value);
+            // If no more values for this index, remove the index
+            if (it->second.empty()) {
+                data.erase(it);
+            }
+        }
+        saveAll(data);
     }
     
     std::vector<int> find(const std::string& index) {
-        std::vector<int> values;
-        auto records = loadRecords();
+        auto data = loadAll();
+        auto it = data.find(index);
         
-        // Find all records with the given index
-        for (const auto& record : records) {
-            if (record.index == index) {
-                values.push_back(record.value);
-            }
+        if (it == data.end()) {
+            return std::vector<int>();
         }
         
-        // Sort values in ascending order
-        std::sort(values.begin(), values.end());
-        
-        return values;
+        // Convert set to vector (already sorted due to set properties)
+        return std::vector<int>(it->second.begin(), it->second.end());
     }
 };
 
